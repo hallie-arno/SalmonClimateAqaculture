@@ -1,0 +1,1030 @@
+---
+title: "220k SNP Pipeline"
+format: html
+editor: source
+---
+
+1.  Setup and Metadata
+```{r}
+#Libraries
+library(tidyverse)
+
+library(pcadapt)
+library(vegan)
+library(data.table)
+library(ggman)
+library(leaflet)
+library(plotly)
+library(cowplot)
+library(marmap)
+
+#For system() commands to use plink
+directoryPath <- "cd /home/hallie/Desktop/SalmonAqcClimateForGithub"
+plinkPath <- "/home/hallie/miniforge3/bin/plink"
+
+#setwd("/home/harno/Desktop/SalmonAQproject2024/Updated")
+
+#Salmon metadata
+Metadata <- fread("Metadata/CIGENE_220K_Metadata_All_Aug_15_2023.txt") %>%
+  mutate(Lat = as.numeric(Lat)) %>%
+  mutate(Lon = as.numeric(Lon)) %>%
+  #filter(Dataset =="May 2021 5700 Recluster" | Dataset == "June 2021 Baseline") %>%  ##FLAG-- this has hybrids
+  filter(Region %in% c("NorthAm", "Aquaculture")) %>%
+  mutate(LongitudePoints = round (Lon, 2)) %>%
+  mutate(LatitudePoints = round (Lat, 2)) %>%
+  rename("Latitude" = "Lat", "Longitude" = "Lon")
+
+#Get estuary data-- see EstuaryDataExtract.qmd
+estuary <- read.csv("Metadata/estuary_env.csv") %>%
+  dplyr::select(-c(Lat, Lon, X)) 
+
+#Remove duplicates
+e <- aggregate(. ~FID, data=estuary, mean, na.rm=TRUE)
+
+ 
+estuary <- na.omit(e)
+
+############################################################
+
+#Get cluster assignment csv (clusters from Nugent et al 2024)
+
+Clusters <- fread("Metadata/SalmonRiverCluster.tsv") %>%
+  rename("FID" = "location") %>%
+  dplyr::select(c(FID, location_name, Province, river_majority_cluster, Majority_admixed)) %>% 
+  merge(estuary, by = "FID", all.x = TRUE, all.y = FALSE) %>%
+  distinct() %>% 
+   filter(FID != "TOB")
+
+
+
+#Merge back with metadata
+Meta <- merge(Metadata, Clusters, by = "FID", all.x = TRUE) %>%
+  mutate(river_majority_cluster = if_else(Region == "Aquaculture", "AQC", river_majority_cluster)) %>%
+  filter(river_majority_cluster %in% c("STL", "NFL", "LAB", "AQC")) %>%
+  filter(FID != "MAG") %>%
+  filter(FID != "TOB")
+
+Meta_noaqc <- Meta %>% 
+  filter(Region == "NorthAm")
+
+
+#Environmental data
+Env <- read.csv("Metadata/SalmonClimateData.csv") %>%
+  dplyr::select(-c(X)) %>%  distinct() 
+
+
+#Write .tsv files for each region WITHOUT aquaculture
+fish_to_include1 <- inner_join(Meta, Env, by = c("LatitudePoints","LongitudePoints")) %>%
+  filter(river_majority_cluster %in% c("NFL", "LAB", "STL"))
+```
+
+
+```{r}
+#For all North American fish
+write.table(fish_to_include1, "PLINK/fishwithenvNA_all.tsv", col.names = F, row.name = F, sep = "\t", quote = F)
+write.csv(Meta_noaqc, "Metadata/220kMetadata.csv")
+
+
+# Recode with PLINK
+#This is a function because I did it for each phylo group as well, but left out that code here
+plinkRecode <- function(cluster) {
+  system(paste0(directoryPath), intern = TRUE)
+ 
+  system(paste0(plinkPath, " --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/fishwithenv", cluster,
+                "_all.tsv --recodeA --make-bed --out PLINK/wild.env.all.", cluster))
+}
+
+plinkRecode("NA")
+
+```
+
+
+
+
+
+
+## Map
+
+```{r}
+library(marmap)
+bathydata <- getNOAA.bathy(-76,-43,42,56, res=1.01,keep=T)
+
+map <- marmap::autoplot.bathy(bathydata, geom=c("r", "c"), colour="grey", size=0.1, coast = FALSE) +
+  scale_fill_etopo(guide = FALSE) +
+  geom_contour(aes(z=z), breaks=c(-100, -200, -500, -1000, -2000, -4000), colour="grey90", size=0.01) +
+  xlab("") +
+  ylab("") +
+  theme(legend.position = "none")
+
+map
+```
+
+```{r}
+m <- map + geom_point(data = Meta %>% 
+                   filter(river_majority_cluster %in% c("NFL", "LAB", "STL")), 
+                 aes(x = Longitude, y =Latitude, col = river_majority_cluster), size = 1, inherit.aes = F) + 
+  scale_color_manual(values = c("firebrick", "plum3", "darkblue")) +
+  theme(legend.position="none") +
+    theme(plot.title = element_text(size = 10),
+          axis.text=element_text(size = 5),
+        axis.title=element_text(size = 7)) +
+  labs(title = "Phylogeographic Groups")
+
+m
+```
+
+## PCA At All SNPs
+
+```{r}
+regionWithAqc <- function(cluster, name) {
+  
+  tempDf <- Meta %>% 
+    filter(river_majority_cluster %in% cluster) %>% 
+    dplyr::select(FID, IID, river_majority_cluster)
+  
+  assign(paste0(name, "cluster"), tempDf, envir = .GlobalEnv)
+  
+  write.table(Meta %>%  
+            filter(river_majority_cluster %in% cluster | river_majority_cluster == "AQC"),
+            paste0("PLINK/", name, ".AQ.tsv"),
+            col.names = F, row.name = F, sep = "\t", quote = F)
+}
+
+regionWithAqc("NFL", "NFL")
+regionWithAqc("STL", "STL")
+regionWithAqc("LAB", "LAB")
+
+  write.table(Meta %>%  
+            filter(river_majority_cluster %in% c("STL", "NFL", "LAB") | river_majority_cluster == "AQC"),
+            paste0("PLINK/", "NA", ".AQ.tsv"),
+            col.names = F, row.name = F, sep = "\t", quote = F)
+
+
+plinkFst <- function(cluster) {
+  system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
+  system(paste0("/home/hallie/miniforge3/bin/plink --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/",
+                cluster, 
+                ".AQ.tsv --make-bed --fst --within PLINK/", 
+                cluster, ".AQ.tsv --out PLINK/", cluster,".AQ"))
+}
+
+
+plinkFst("STL")
+plinkFst("NFL")
+plinkFst("LAB")
+plinkFst("NA")
+```
+
+
+```{r}
+pcadaptPlot <- function(cluster, color = "salmon") {
+  
+  pcadaptObj <- read.pcadapt(paste0("PLINK/", cluster, ".AQ.bed"), type = "bed")
+  
+  famObj <- fread(paste0("PLINK/", cluster, ".AQ.fam")) %>% mutate(FID = V1, IID = V2) %>% dplyr::select(FID, IID) %>%  inner_join(., Meta)
+  
+  pca <- pcadapt(pcadaptObj, K = 2, min.maf = 0.01)
+#  print(cluster, pca$singular.values)
+  AQ.pcascores <- pca$scores
+
+  colnames(AQ.pcascores) <- c("PC1", "PC2")
+  
+  AQ.pcascores.meta <- bind_cols(famObj, AQ.pcascores)
+  #assign(paste0(cluster, "AQ.pcascores.meta"), AQ.pcascores.meta, envir = .GlobalEnv)
+  
+  pca.plot <- ggplot() +
+    geom_point(data = AQ.pcascores.meta, aes(x = PC1, y = PC2, colour = Region, label = Rivername), size = 0.5) +
+    theme_bw() +
+    scale_color_manual(labels = c("Aquaculture", cluster), values = c("darkgray", color)) +
+    labs(title = paste(cluster, "PCA"),
+         x = paste0("PC1 - ", round((pca$singular.values[1]^2 * 100), digits = 3), "%"),
+         y = paste0("PC2 - ", round((pca$singular.values[2]^2 * 100), digits = 3), "%")) +
+    theme(legend.position = "none",
+          panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()) +
+     theme(plot.title = element_text(size = 10),
+          axis.text=element_text(size = 5),
+        axis.title=element_text(size = 7)) +
+    theme(aspect.ratio = 17/26)
+  return(pca.plot)
+
+  #return(AQ.pcascores.meta)
+  
+  
+}
+
+n <- pcadaptPlot("NFL", "plum3")
+s <- pcadaptPlot("STL", "darkblue")
+l <- pcadaptPlot("LAB", "firebrick")
+
+p <- plot_grid(
+m, 
+n,
+s,
+l,
+ncol = 2
+)
+
+ggsave("Figs/allPca.png", dpi = 350)
+p
+```
+
+## FIX @ NAFC
+
+```{r}
+# RDA Function - again cluster is just "NA" here for North America
+cluster <- "NA"
+envPCA.RDA <- function(cluster) {
+  fam.env <- fread(paste0("PLINK/wild.env.all.", cluster,".fam"), header = F) %>%  mutate(IID = V2, FID = V1) %>%  select(FID, IID)
+ 
+  if (cluster != "NA") {
+    Env <- inner_join(fam.env, fish_to_include1 %>% filter(river_majority_cluster %in% cluster))
+    } else {
+    updatedEnv <- inner_join(fam.env, fish_to_include1)# %>%
+   #   filter(river_majority_cluster %in% c("LAB", "NFL", "STL"))
+  }
+ 
+#\  BIOvar <- paste0("Bio", 1:26)
+ 
+#  BIOvar_sd <- paste0(BIOvar, ".scale")
+ 
+  Env2 <- updatedEnv %>%
+    select(tidyselect::starts_with(c("Bio", "MS_")))
+ 
+  Env <- Env2  %>%
+    mutate(across(everything(), ~ as.numeric(scale(.)), .names = "{.col}.scale"))
+ 
+  Env_SDmatrix <- Env  %>% select(contains(".scale"))  
+ 
+#  which(is.na(Env_SDmatrix))
+ 
+ # Env_SDmatrix2 <- data.table(Env_SDmatrix)
+   
+ 
+ 
+  Env_SDmatrix<- as.matrix(Env_SDmatrix)
+ 
+ 
+  Env_PCs <- princomp(Env_SDmatrix)
+ 
+  loadings  <- data.frame(unclass(Env_PCs$loadings)) %>%
+    mutate(BIOvar = rownames(.))
+  
+  assign(paste0("loadings_", cluster), loadings, envir = .GlobalEnv)
+
+ 
+  #combine env and PC env data
+  EnvPC_Biovars <- bind_cols(Env,Env_PCs$scores[,1:5])
+
+ 
+  #PCAdapt
+  pcadapt.object <-  read.pcadapt(paste0("wild.env.all.", cluster, ".bed"), type = "bed")
+ 
+  PCA <- pcadapt(input = pcadapt.object , K = 5)
+ 
+  PCAScores <- PCA$scores
+ 
+  colnames(PCAScores) <- paste0("PC", rep(1:5))
+ 
+  #PCA$singular.values^2
+ 
+  GenoPCA_EnvPCA <- data.frame(bind_cols(EnvPC_Biovars, PCAScores))
+ 
+  assign(paste0("GenoPCA_EnvPCA.", cluster), GenoPCA_EnvPCA, envir = .GlobalEnv)
+ 
+  #genos.dose <- fread(paste0("wild.env.all.", cluster, ".raw"), sep = " ") %>%  select (-FID, -IID, -PAT, -MAT, -SEX, -PHENOTYPE)
+  #genos.dose.imp <- data.frame(apply(genos.dose, 2, function(x) replace(x, is.na(x), as.numeric(names(which.max(table(x)))))))
+ 
+  #Note RDA will take ~60GB RAM
+  #rda <- rda(genos.dose.imp ~ GenoPCA_EnvPCA$Comp.1+GenoPCA_EnvPCA$Comp.2+GenoPCA_EnvPCA$Comp.3, scale=T)
+  #I usually save as an object on my computer so I can transfer to my PC
+ # saveRDS(rda, file = paste0(cluster, "RDA_with_estuary.rds"))
+ 
+ 
+}
+envPCA.RDA("NA")
+
+## Call functiuon or read
+#rda <- readRDS("/home/hallie/Desktop/test_estuary.rds")
+
+
+
+chr <- read.csv("Metadata/ssal_chromosme_conversion.csv") %>%
+  rename("CHR" = "NC")
+
+# Get loadings
+RDA_scores_map  <- function(RDAobj, mapobj, Knum) {
+  RDAscores <- data.frame(abs(RDAobj$CCA$v[,1:Knum])) #get absolute values of RDA scores for easy plotting
+  colnames(RDAscores) <- paste0("absRDA", rep(1:Knum))
+  RDAobj_map1 <- bind_cols(mapobj, RDAscores)
+  # print(RDAobj_map)
+  RDAobj_map <- merge(RDAobj_map1, chr, by.x = "CHROM", by.y = "CHR")
+  return(RDAobj_map)}
+
+chrom_map <- fread(paste0("wild.env.", "all.NA", ".bim")) %>%
+  mutate(CHROM = V1, SNP = V2, BP = V4) %>%
+  select(CHROM, SNP, BP)
+
+rda.loadings.map <- RDA_scores_map(rda1, chrom_map, 3)
+
+
+##OR read
+#TEMP CHANGED
+rda.loadings.map <- read.csv("/home/hallie/Desktop/SalmonAQproject2024/UpdatedNov24/estuaryloadings.csv")
+
+rda.loadings.map
+```
+23 June - RDA Plot for supplements
+```{r}
+library(vegan)
+```
+
+
+```{r}
+#Do not run on PC
+#rda <- readRDS("/home/hallie/Desktop/test_estuary.rds")
+#plot(rda, scaling = 3)
+```
+
+## PCA loadings for supplement
+```{r}
+l <- loadings_NA %>% 
+  select(Comp.1:Comp.5)
+
+l
+
+write.table(l, "Figs/Supplements/EnvLoadings.tsv", row.names = T)
+```
+
+## Outlier selection - 3 SD Overlapping
+
+```{r}
+sd <- 3*sd(rda.loadings.map$absRDA1)
+ggplot(rda.loadings.map, aes(x = absRDA1, y = absRDA2, colour = absRDA3)) +
+  geom_point() +
+#  geom_vline(xintercept = sd) +
+  theme_bw()
+```
+
+```{r}
+sd <- rda.loadings.map %>% 
+  filter(abs(absRDA1) > 3 * sd(absRDA1) & abs(absRDA2) > 3 * sd(absRDA2) & abs(absRDA3) > 3 * sd(absRDA3)) 
+sd
+```
+
+```{r}
+sd2 <- sd %>% 
+ mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% 
+  select(CHROM, POSstart, POSend, SNP) %>%
+  distinct()
+
+
+write.table(sd2,  "sdOutliersAllAxes.bed", col.names = F, row.names = F, sep = "\t", quote = F)
+
+system(paste0("bedtools intersect -b sdOutliersAllAxes.bed -a Ssal3_1.genes.unique.bed > sd.outlier.genes.tsv"))
+
+```
+
+## Outlier Selection - % on each axis
+
+```{r}
+##NOTE FOR LATER: SAVING OLs on ALL axes as 1 DF!! Will need to select later!! ALSO - 1%!
+ 
+  rda.SNPscores_OL999_1 <-rda.loadings.map %>%  
+    filter(absRDA1 > quantile(absRDA1, 0.99))
+    
+  rda.SNPscores_OL999_2 <-rda.loadings.map %>%  
+    filter(absRDA2 > quantile(absRDA2, 0.99)) 
+   
+
+  rda.SNPscores_OL999_3 <-rda.loadings.map %>%  
+    filter(absRDA3 > quantile(absRDA3, 0.99)) 
+  #  mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% 
+  # select(CHROM, POSstart, POSend, SNP)
+  #  write.table(rda.SNPscores_OL999_3,  paste0(cluster, ".rda.outlierRDA3.bed"), col.names = F, row.names = F, sep = "\t", quote = F)
+
+  
+
+  rda.outlier.bed <- bind_rows((rda.SNPscores_OL999_1 %>%  select(CHROM, BP, SNP)), 
+          (rda.SNPscores_OL999_2 %>%  select(CHROM, BP, SNP)),
+           (rda.SNPscores_OL999_3 %>%  select(CHROM, BP, SNP))) %>% 
+  distinct() %>%  
+  mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% #NEED
+  select(CHROM, POSstart, POSend, SNP)
+  #print(rda.outlier.bed)
+
+  
+  
+  write.table(rda.outlier.bed, "PLINK/rda.outlier.bed", col.names = F, row.names = F, sep = "\t", quote = F)
+  
+    write.table(rda.SNPscores_OL999_1 %>% 
+                mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% 
+                select(CHROM, POSstart, POSend, SNP),
+              "PLINK/rda1.outlier.bed", col.names = F, row.names = F, sep = "\t", quote = F)
+  
+    write.table(rda.SNPscores_OL999_2 %>% 
+                mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% 
+                select(CHROM, POSstart, POSend, SNP),
+              "PLINK/rda2.outlier.bed", col.names = F, row.names = F, sep = "\t", quote = F)
+    
+      write.table(rda.SNPscores_OL999_3 %>% 
+                mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% 
+                select(CHROM, POSstart, POSend, SNP),
+              "PLINK/rda3.outlier.bed", col.names = F, row.names = F, sep = "\t", quote = F)
+  
+  
+## Bedtools intersect 
+  system(paste0("bedtools intersect -b PLINK/rda.outlier.bed -a Panel/Ssal3_1.genes.unique.bed -wb >  Figs/Supplements/rda.outlier.genes.tsv"))
+```
+
+## PCA at climate-associated - used?
+
+```{r}
+for (cluster in c("NFL", "LAB", "STL", "NA")) {
+system(paste0("/home/hallie/miniforge3/bin/plink --allow-extra-chr --maf 0.01 --bfile Panel/Ssal.31.220K.mapped.June2023merge --extract PLINK/rda.outlier.bed --keep PLINK/", cluster, ".AQ.tsv --make-bed --out PLINK/", cluster, ".AQ.ClimateAsSNPs"))
+}
+```
+
+```{r}
+pcadaptPlot <- function(cluster, color = "salmon") {
+  
+ 
+  pcadaptObj <- read.pcadapt(paste0("PLINK/", cluster, ".AQ.ClimateAsSNPs.bed"), type = "bed")
+  
+  famObj <- fread(paste0("PLINK/", cluster, ".AQ.ClimateAsSNPs.fam")) %>% mutate(FID = V1, IID = V2) %>% dplyr::select(FID, IID) %>%  inner_join(., Meta)
+  
+  pca <- pcadapt(pcadaptObj, K = 2, min.maf = 0.01)
+  
+  AQ.pcascores <- pca$scores
+  
+  colnames(AQ.pcascores) <- c("PC1", "PC2")
+  
+  AQ.pcascores.meta <- bind_cols(famObj, AQ.pcascores)
+  
+  #assign(paste0(cluster, "AQ.pcascores.meta"), AQ.pcascores.meta, envir = .GlobalEnv)
+  
+  pca.plot <- ggplot() + 
+    geom_point(data = AQ.pcascores.meta, aes(x = PC1, y = PC2, colour = Region, label = Rivername), size = 0.5) +
+    theme_bw() +
+    scale_color_manual(labels = c("Aquaculture", cluster), values = c("darkgray", color)) +
+    labs(title = paste(cluster, "PCA at 1% Climate Associated SNPs")) +
+    theme(legend.position = "none") +
+     theme(plot.title = element_text(size = 10),
+          axis.text=element_text(size = 5),
+        axis.title=element_text(size = 7)) +
+    theme(aspect.ratio = 17/26)
+  return(pca.plot)
+
+  #return(AQ.pcascores.meta)
+  
+  
+}
+
+n <- pcadaptPlot("NFL", "plum3")
+s <- pcadaptPlot("STL", "darkblue")
+l <- pcadaptPlot("LAB", "firebrick")
+
+p <- plot_grid(
+#m, 
+n,
+s,
+l,
+ncol = 1
+)
+
+ggsave("Figs/ClimAssocPca.png", dpi = 350)
+p
+```
+
+## Plink fst
+
+```{r}
+print("Climate Associated:")
+
+plinkFstClimate<- function(cluster) {
+  
+  #system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
+  ## halli note: double check this (previous versions used an existing BIM did not extract here)
+  system(paste0("/home/hallie/miniforge3/bin/plink --allow-extra-chr --maf 0.01 --bfile Panel/Ssal.31.220K.mapped.June2023merge --extract PLINK/rda.outlier.bed --keep PLINK/", cluster, ".AQ.tsv --make-bed --fst --within PLINK/", cluster,".AQ.tsv --out PLINK/", cluster, ".AQ.Climate"))
+  
+}
+
+plinkFstClimate("NA")
+plinkFstClimate("STL")
+plinkFstClimate("NFL")
+plinkFstClimate("LAB")
+```
+## Maybe Remove?
+
+```{r}
+##26 December edited to rm climate associated 
+plinkFst <- function(cluster) {
+  print(cluster)
+  system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
+  system(paste0("/home/hallie/miniforge3/bin/plink --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/",
+                cluster, 
+                ".AQ.tsv --exclude PLINK/", cluster, ".AQ.Climate.bed", " --make-bed --fst --within PLINK/", 
+                cluster, ".AQ.tsv --out PLINK/", cluster,".AQ.Nuetral"))
+}
+
+plinkFst("NA")
+plinkFst("STL")
+plinkFst("NFL")
+plinkFst("LAB")
+
+```
+
+
+## Manhattan Plots
+
+```{r}
+cluster <- "NA"
+
+fstManhattanPlot <- function(cluster) {
+  
+  AQ.fst <- fread(paste0("PLINK/", cluster, ".AQ.Nuetral.fst"))
+  
+  AQ.Climate.fst <- fread(paste0("PLINK/", cluster, ".AQ.Climate.fst")) %>% 
+    merge(chr, all.x = TRUE)
+  
+  ##just anti-join here? 
+  
+ # print(AQ.Climate.fst)
+  genelabels <- fread("Figs/Supplements/rda.outlier.genes.tsv") %>% 
+    rename("CHR" = "V1",
+           "POSStart" = "V2",
+           "POSEnd" = "V3",
+           "Gene" = "V4",
+           "SNP" = "V8")
+  
+ Genes.AQ.Climate.fst <- merge(genelabels, AQ.Climate.fst)
+ # print(genelabels)
+  cutoff <- mean(quantile(AQ.fst$FST, 0.999, na.rm = T))
+  
+  labels <- Genes.AQ.Climate.fst %>% 
+    filter(FST >= cutoff) %>% 
+    filter(!grepl("LOC", Gene)) %>% 
+    distinct(Gene, .keep_all= TRUE)
+  
+  write.csv(labels, paste0("PLINK/", cluster, "manhattanPlotGeneLabels.csv"))
+  AQ.OL99.fst <- AQ.fst %>%  filter(FST > quantile(FST, 0.99, na.rm = T)) 
+  random5K <- sample_n(AQ.fst, 5000)
+  
+#  
+  AQ.OL99.5Kds.fst <- bind_rows(AQ.OL99.fst, random5K) %>%  distinct() #%>% 
+   # mutate(Region = "NFL")
+  AQ.OL99.5Kds.fst <- merge(AQ.OL99.5Kds.fst, chr, all.x = TRUE)
+  
+  AQ.plot <- ggman(gwas = AQ.OL99.5Kds.fst,snp = "SNP", 
+                   bp = "POS", 
+                   chrom = "ChrNum", 
+                   pvalue = "FST", 
+                   #sigLine = 0.276, 
+                   logTransform = F, 
+                   ymax = 1, 
+                   pointSize = 1, 
+                   ylabel = "FST") + 
+      theme_classic() +
+      ylim(0, 0.7) +
+      labs(title = paste(cluster, "FST and Climate-Associated Outliers")) +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+      p <- ggmanHighlight(ggmanPlot = AQ.plot, highlight = AQ.Climate.fst$SNP, relative.positions = TRUE, colour 	= "red", size = 1) 
+      ggmanLabel(p, labelDfm = labels, snp = "SNP", label = "Gene", max.overlaps = 50, size = 2) +
+        scale_color_manual(values=c("grey62","grey78")) +
+          theme(plot.title = element_text(size = 8),
+          axis.text=element_text(size = 5),
+        axis.title=element_text(size = 5))
+
+}
+manPlots <- plot_grid(
+fstManhattanPlot("NFL"),
+fstManhattanPlot("STL"),
+fstManhattanPlot("LAB"),
+fstManhattanPlot("NA"),
+ncol = 2
+
+)
+
+ggsave("Figs/ManhattanPlotsPhyloGroup.png", width = 12, height = 9)
+```
+
+```{r}
+
+nflLab <- read.csv("PLINK/NFLmanhattanPlotGeneLabels.csv") %>% 
+  mutate(Group = "NFL")
+labLab <- read.csv("PLINK/LABmanhattanPlotGeneLabels.csv") %>% 
+  mutate(Group = "LAB")
+stlLab <-read.csv("PLINK/STLmanhattanPlotGeneLabels.csv") %>% 
+  mutate(Group = "STL")
+naLab <-read.csv("PLINK/NAmanhattanPlotGeneLabels.csv") %>% 
+  mutate(Group = "NorthAm")
+
+labels <- rbind(nflLab, labLab, stlLab, naLab) %>% 
+  select(c(ChrNum, SNP, POS, Gene, Group))
+labels
+
+write.csv(labels, "PLINK/ManhattanPlotLabels.csv")
+```
+
+# NEED SEPERATE RDA AXES BEDFILES FOR THIS PLOT
+
+```{r}
+outlierPlot <- function(cluster, RDA) {
+  
+  fstAll <- fread(paste0("PLINK/", cluster, ".AQ.fst"))
+ # rda.loadings.map <- fread("rda.loadings.map")
+
+  
+  RDAfst.map <- inner_join(fstAll, rda.loadings.map, by = "SNP")
+
+   RDAoutliers <- fread(paste0("PLINK/","rda", RDA, ".outlier.bed")) %>% 
+     mutate(Outlier = "Climate") %>% 
+     rename("SNP" = "V4")  %>%  
+     dplyr::select(SNP, Outlier) %>%  
+     inner_join(., RDAfst.map)
+
+
+  fstOL <- fstAll %>%  
+    filter(FST > quantile(FST, 0.99, na.rm = T)) %>%  
+    mutate(Outlier = "Aquaculture")  %>%  
+    dplyr::select(SNP, Outlier) %>%  
+    inner_join(., RDAfst.map)
+  
+ 
+
+  OL.both <- inner_join(fstOL, RDAoutliers, by = "SNP") %>%  
+    mutate(Outlier = "Climate and Aquaculture") %>%  
+    dplyr::select(SNP, Outlier) %>%  
+    inner_join(.,RDAfst.map)
+  
+  n_OlBoth <- length(OL.both$SNP)
+  print(n_OlBoth)
+    
+  OL.all <- bind_rows(OL.both, RDAoutliers, fstOL)
+  
+  OL.all.bed <- OL.all %>% 
+    mutate(POSstart  = BP - 2500, POSend = BP + 2500) %>% 
+    select(CHROM, POSstart, POSend, SNP)
+  OL.all.bed <- na.omit(OL.all.bed)
+   write.table(OL.all.bed, 
+              "PLINK/overlappingOLwithEstuary.bed", col.names = F, row.name = F, sep = "\t", quote = F)
+      
+  
+
+
+  random5k <- RDAfst.map %>% 
+    filter(!SNP %in% OL.all$SNP) %>% 
+    mutate(Outlier = "Random SNPs") %>% 
+    sample_n(size =  5000)
+ 
+  OL.random5k <-  bind_rows(OL.all, random5k) %>% 
+    mutate(translocation = if_else(CHR == "NC_059464.1" | CHR == "NC_059442.1", "1", "0"))
+
+  p1 <- ggplot() + 
+    geom_point(data = OL.random5k, 
+                        aes( x = eval(parse(text = paste0("absRDA", RDA))), 
+                             y = FST, 
+                             colour = Outlier, 
+                             label = ChrNum), size = 0.2)  + 
+    geom_point(data = OL.random5k %>%  
+                 filter(Outlier %in% "Climate"), 
+               aes(x = eval(parse(text = paste0("absRDA", RDA))), 
+                   y = FST, 
+                   colour = Outlier, 
+                   label = ChrNum), size = 0.2) +
+    geom_point(data = OL.random5k %>%  
+                 filter(Outlier %in% "Climate and Aquaculture"), 
+               aes(x = eval(parse(text = paste0("absRDA", RDA))), 
+                   y = FST, 
+                   colour = translocation, 
+                   label = ChrNum), size = 0.2) +
+   # (max(OL.random5k$FST)-min(OL.random5k$FST)*.75)
+    annotate("text", y=0.05, x = .001, label = n_OlBoth, size = 3, fontface = "bold") +
+    labs(title = cluster, x = paste("absRDA", RDA)) +
+  theme_bw() +
+    scale_color_manual(values = c("royalblue", "lightskyblue", "plum", "salmon", "red", "gray")) +
+    theme(legend.position="none") +
+    theme(plot.title = element_text(size = 5),
+          axis.text=element_text(size = 5),
+        axis.title=element_text(size = 5))
+
+  
+  
+ 
+
+
+  return(p1) 
+}
+
+
+
+
+# add legend
+
+pgrid <- plot_grid(outlierPlot("LAB", 1),
+outlierPlot("STL", 1),
+outlierPlot("NFL", 1),
+outlierPlot("LAB", 2),
+outlierPlot("STL", 2),
+outlierPlot("NFL", 2),
+outlierPlot("LAB", 3),
+outlierPlot("STL", 3),
+outlierPlot("NFL", 3), nrow = 3)
+
+pgrid
+```
+
+
+```{r}
+  
+chr <- read.csv("Metadata/ssal_chromosme_conversion.csv") %>%
+  rename("CHR" = "NC")
+
+fstAll <- fread(paste0("PLINK/NA", ".AQ.fst"))
+RDAfst.map <- inner_join(fstAll, rda.loadings.map, by = "SNP")
+
+fstOL <- fstAll %>%  
+  filter(FST > quantile(FST, 0.99, na.rm = T)) %>%  
+  mutate(Outlier = "Aquaculture")  %>%  
+  dplyr::select(SNP, Outlier) %>%  
+  inner_join(., RDAfst.map)
+  
+ 
+RDA.OL <- rda.outlier.bed %>% 
+  rename("CHR" = "CHROM") %>% 
+    mutate(Outlier = "Climate") %>% 
+   dplyr::select(SNP, Outlier) %>% 
+   inner_join(., RDAfst.map) 
+
+OL.both <- inner_join(fstOL, RDA.OL, by = "SNP") %>%  
+    mutate(Outlier = "Climate and Aquaculture") %>%  
+    dplyr::select(SNP, Outlier) %>%  
+    inner_join(.,RDAfst.map)
+
+Ol.all <- rbind(OL.both, RDA.OL, fstOL) #%>% 
+  #select(Outlier, ChrNum) 
+```
+STATS fst @clim0-assoc
+
+```{r}
+ggplot() +
+  geom_density(aes(x = fstAll$FST)) +
+  geom_density(aes(x = RDA.OL$FST), colour = "green")
+```
+
+```{r}
+t <- wilcox.test(fstAll$FST, RDA.OL$FST, paired = FALSE, var.equal = FALSE)
+t
+```
+```{r}
+var.test(fstAll$FST, RDA.OL$FST, alternative = "two.sided")
+```
+```{r}
+t.test(fstAll$FST, RDA.OL$FST, alternative = "two.sided")
+
+
+sd(fstAll$FST, na.rm = TRUE)
+sd(RDA.OL$FST, na.rm = TRUE)
+```
+
+```{r}
+282.13 / 244.22
+```
+
+```{r}
+(1 + 22833 * (1 / 147076)) ** (148323 / 2)
+```
+
+
+```{r}
+fstAll2 <- fstAll %>% 
+  mutate(group = "All")
+
+RDA.OL2 <- RDA.OL %>% 
+  mutate(group = "OL") %>% 
+  select(c(CHR, SNP, POS, NMISS, FST, group))
+
+both <- rbind(fstAll2, RDA.OL2)
+both
+a <- aov(FST~group, data = both)
+summary(a)
+
+
+```
+######################
+
+Barplot for supplements
+```{r}
+bp<-ggplot(Ol.all, aes(x=ChrNum, color = Outlier, fill = Outlier)) + 
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Chromosome")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggsave("Figs/barplot.png")
+
+```
+
+## Bedtools for both for shiny go - 1%, NOT 3sd
+
+```{r}
+system(paste0("bedtools intersect -b PLINK/overlappingOLwithEstuary.bed -a Panel/Ssal3_1.genes.unique.bed -wb >  Figs/Supplements/fsatAndRda.outlier.genes.tsv"))
+```
+
+```{r}
+
+  fstLAB <- fread(paste0("PLINK/LAB", ".AQ.Nuetral.fst")) %>% 
+    mutate(Phylo = "LAB")
+  fstSTL <- fread(paste0("PLINK/STL", ".AQ.Nuetral.fst")) %>% 
+    mutate(Phylo = "STL")
+  fstNFL <- fread(paste0("PLINK/NFL", ".AQ.Nuetral.fst")) %>% 
+    mutate(Phylo = "NFL")
+  
+  fstAll <- rbind(fstLAB, fstSTL, fstNFL) %>% 
+    mutate(Phylo = as.factor(Phylo))
+  # 
+  # rda.loadings.mapLAB <- fread(paste0("LAB",".rda.loadings.map"))
+  # rda.loadings.mapSTL <- fread(paste0("STL",".rda.loadings.map"))
+  # rda.loadings.mapNFL <- fread(paste0("NFL",".rda.loadings.map"))
+  # 
+  # RDAfst.map.LAB <- inner_join(fstLAB, rda.loadings.mapLAB, by = "SNP")
+  # RDAfst.map.STL <- inner_join(fstSTL, rda.loadings.mapSTL, by = "SNP")
+  # RDAfst.map.NFL <- inner_join(fstNFL, rda.loadings.mapNFL, by = "SNP")
+  # 
+  # RDAoutliersLAB <- fread(paste0("LAB", ".rda.outlier.bed")) %>% 
+  #   mutate(Outlier = "Climate") %>% 
+  #   rename("SNP" = "V4")  %>%  dplyr::select(SNP, Outlier) %>%  
+  #   inner_join(., RDAfst.map.LAB) %>% 
+  #   mutate(Phylo = "LAB")
+  # 
+  # RDAoutliersNFL <- fread(paste0("NFL", ".rda.outlier.bed")) %>% 
+  #   mutate(Outlier = "Climate") %>% 
+  #   rename("SNP" = "V4")  %>%  dplyr::select(SNP, Outlier) %>%  
+  #   inner_join(., RDAfst.map.NFL) %>% 
+  #   mutate(Phylo = "NFL")
+  # 
+  # RDAoutliersSTL <- fread(paste0("STL", ".rda.outlier.bed")) %>% 
+  #   mutate(Outlier = "Climate") %>% 
+  #   rename("SNP" = "V4")  %>%  dplyr::select(SNP, Outlier) %>%  
+  #   inner_join(., RDAfst.map.STL) %>% 
+  #   mutate(Phylo = "STL")
+  # 
+  RDAoutliers <- fread("Figs/Supplements/rda.outlier.genes.tsv") %>% 
+    mutate(Outlier = "Climate") %>% 
+    rename("SNP" = "V8")  %>%  dplyr::select(SNP, Outlier) %>% 
+    inner_join(fstAll, by = "SNP")
+  
+  
+densityPlot <-  ggplot() +
+    geom_density(data = fstAll, aes(x = FST, fill = Phylo, color = "All SNPs"), alpha = 0.00, adjust = 1/3) +
+   # scale_fill_manual(values = c("red", "salmon", "orange")) +
+    geom_density(data = RDAoutliers, aes(x = FST, fill = Phylo, color = "Climate-Associated SNPs"), alpha = 0.0, adjust = 1/3) +
+    scale_color_manual(name = "FST", values = c("All SNPs" = "plum", "Climate-Associated SNPs" = "salmon"))+
+    scale_fill_manual(guide = "none", values = c("salmon", "goldenrod", "mediumaquamarine", "plum", "royalblue", "firebrick")) +
+    #scale_color_manual(values = c("red", "lightskyblue", "orange", "red", "lightskyblue", "orange")) +
+    theme_bw()  +
+    theme(legend.position = "right") +
+    theme(aspect.ratio = 0.2) +
+  theme(plot.margin = grid::unit(c(0,0,0,0), "mm"))
+densityPlot
+
+ggsave("Figs/densityPlot.png", width = 10, height = 2)
+```
+
+```{r}
+meanFST <- data.frame()
+
+for (i in 1:length(unique(Meta$FID))) {
+  rivername <- unique(Meta$FID)[i]
+  #Create labels/ names
+  label <- paste0("PLINK/fstByRiver/", rivername, ".AQ.tsv")
+  plinkOutput <- paste0(rivername, ".AQ.FST.Out")
+  
+  #Filter each river
+  fishToKeep <- Meta %>% 
+    filter(FID == rivername | Region == "Aquaculture") %>% 
+    select(FID, IID, Region) 
+  
+   #PLINK
+  if ("NorthAm" %in% fishToKeep$Region) {
+    
+      write.table(fishToKeep, 
+              label, col.names = F, row.name = F, sep = "\t", quote = F)
+      
+      systmcmd <- paste0("/home/hallie/miniforge3/bin/plink --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --make-bed --exclude PLINK/NA.AQ.Climate.bed --keep ", label, " --fst --within ", label," --out PLINK/fstByRiver/", plinkOutput)
+      system(systmcmd, intern=TRUE)
+      
+      ##Read fst and get mean
+      
+      
+      fstFile <- fread(paste0("PLINK/fstByRiver/", rivername, ".AQ.FST.Out.fst"))
+      meanfst <- data.frame(rivername, mean(fstFile$FST))
+      
+      meanFST <- rbind(meanFST, meanfst)
+     # return(meanFST)
+  }
+  
+    
+   # write.csv(outliers, paste0("outFiles/Outliers/", rivername, "outliers.csv"))
+    #Plots
+    #FID.pca.plot <- ggplot() + geom_point(data = FID.pcascores.meta, aes(x = PC1, y = PC2))
+    #FID.pca.plot
+
+}
+
+
+ 
+
+colnames(meanFST) <- c("FID", "FST")
+meanFST.meta <- merge(meanFST, Meta) %>% 
+  distinct()
+
+
+meanFSTClimate <- data.frame()
+
+for (i in 1:length( unique(Meta$FID))) {
+  rivername <- unique(Meta$FID)[i]
+  #Create labels/ names
+  label <- paste0("PLINK/fstByRiver/", rivername, ".AQ.Climate.tsv")
+  plinkOutput <- paste0(rivername, ".AQ.FST.Climate.Out")
+  
+  #Filter each river
+  fishToKeep <- Meta %>% 
+    filter(FID == rivername | Region == "Aquaculture") %>% 
+    select(FID, IID, Region, river_majority_cluster) 
+  
+  findcluster <- fishToKeep %>% 
+    filter(Region == "NorthAm")
+  
+  cluster <- findcluster$river_majority_cluster[1] #check
+
+   #PLINK
+  if ("NorthAm" %in% fishToKeep$Region & rivername %in% fishToKeep$FID) {
+   # no longer need to be done on thsi computer-- UNCOMMENT BEFORE PUBLISHING OR TRANSFERRING
+       write.table(fishToKeep,
+               label, col.names = F, row.name = F, sep = "\t", quote = F)
+
+       systmcmd <- paste0("/home/hallie/miniforge3/bin/plink --allow-extra-chr --bfile Panel/Ssal.31.220K.mapped.June2023merge --keep ", label, " --extract range Figs/Supplements/rda.outlier.genes.tsv --fst --within ", label, " --make-bed --out PLINK/fstByRiver/", plinkOutput)
+       system(systmcmd, intern=TRUE)
+      
+      ##Read fst and get mean
+      
+      
+      fstFile <- fread(paste0("PLINK/fstByRiver/", rivername, ".AQ.FST.Climate.Out.fst")) 
+        
+      fstFile1 <- na.omit(fstFile)
+
+      meanfst <- data.frame(rivername, mean(fstFile1$FST))
+      meanFSTClimate <- rbind(meanFSTClimate, meanfst)
+     # return(meanFST)
+  }
+}
+
+
+
+colnames(meanFSTClimate) <- c("FID", "FST.Climate")
+fstTotal <- merge(meanFST.meta, meanFSTClimate)
+write.csv(fstTotal, "PLINK/fstByRiver.csv")
+
+p <- ggplot(fstTotal, aes(FST, FST.Climate, color = river_majority_cluster, label = FID)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, size = 0.5, color = "gray") +
+  labs(x = "FST at All SNPs", y = "FST at Climate-Associated SNPs", color = "Phylo Group") +
+  theme_bw() +
+  theme(legend.position = "bottom") 
+
+ggsave("Figs/FstByRiver.png", width = 10, height = 7)
+```
+
+
+
+```{r}
+mag <- ggplot(fstTotal, aes(x = FID, y = FST.Climate/FST, color = Province)) +
+  geom_point()
+
+ggplotly(mag)
+```
+
+```{r}
+Meta %>% filter(Province == "NB") %>% 
+  select(FID, location_name) %>% 
+  distinct()
+```
+
+
+
+```{r}
+pal <- colorNumeric(
+  palette = "YlOrRd",
+  domain = fstTotal$FST.Climate)
+
+map <- 
+  leaflet(fstTotal) %>% 
+  addTiles() %>% 
+  addCircleMarkers(lat = ~Latitude, lng = ~Longitude, radius = 5, fillColor = ~pal(FST.Climate), weight = .2, color = "black", popup = ~paste(FID, FST.Climate)) %>% 
+  addLegend("bottomright", pal = pal, values = ~FST.Climate, title = "FST", opacity = 1)
+  #addRasterImage(result, opacity = 0.5)
+map
+```
+
+

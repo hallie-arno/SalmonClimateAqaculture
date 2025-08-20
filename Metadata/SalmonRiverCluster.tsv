@@ -1,0 +1,144 @@
+location	location_name	Province	lat	lon	river_majority_cluster	Majority_admixed
+TR	TroutRiver	NL-Labrador	49.65	-57.76	LAB	FALSE
+SR	SusanRiver	NL-Labrador	53.74	-61.04	LAB	FALSE
+CHR	St Charles	NL-Labrador	52.23	-55.84	LAB	FALSE
+SK	SebaskachuRiver	NL-Labrador	53.79	-60.14	LAB	FALSE
+SH	SandHillRiver	NL-Labrador	53.57	-56.35	LAB	FALSE
+RW	RedWineRiver	NL-Labrador	53.93	-61.00	LAB	FALSE
+PR	PetersRiver	NL-Labrador	53.34	-60.71	LAB	FALSE
+PA	ParadiseRiver	NL-Labrador	53.42	-57.25	LAB	FALSE
+MU	MulliganRiver	NL-Labrador	53.87	-60.09	LAB	FALSE
+MNB	MainBrook	NL-Labrador	54.24	-57.87	LAB	FALSE
+LL	L'anseauLoupRiver	NL-Labrador	51.53	-56.82	LAB	TRUE
+KE	KenamuRiver	NL-Labrador	53.48	-59.91	LAB	FALSE
+H	HuntRiver	NL-Labrador	55.57	-60.67	LAB	FALSE
+FO	ForteauRiver	NL-Labrador	51.48	-56.94	LAB	TRUE
+ENG	English River	NL-Labrador	54.97	-59.75	LAB	FALSE
+EA	EagleRiver	NL-Labrador	53.53	-57.47	LAB	FALSE
+CR	CrookedRiver	NL-Labrador	53.87	-60.83	LAB	FALSE
+CL	CarolineRiver	NL-Labrador	53.25	-60.42	LAB	FALSE
+CB	CapeCaribou	NL-Labrador	53.62	-60.42	LAB	FALSE
+BIG	Big River	NL-Labrador	54.84	-58.94	LAB	FALSE
+COR	Corneille	QC	50.28	-62.88	NFL	TRUE
+NAT	Natashquan	QC	50.12	-61.80	STL	TRUE
+TRI	RiviredelaTrinite	QC	49.42	-67.30	STL	TRUE
+SJQ	Saint-Jean (NorthShore) SJQ8	QC	50.28	-64.33	STL	TRUE
+NHR	North Harbour River	NL	47.21	-53.62	NFL	FALSE
+BER	Big East	NL	50.63	-57.17	NFL	TRUE
+CRB	CapeRogerBrook	NL	47.44	-54.69	NFL	FALSE
+ARO	RivireAuxRochers	QC	50.00	-66.86	STL	FALSE
+SIM	Simms Brook 2020 YoY	NL	47.67	-55.48	NFL	FALSE
+BVB	Beaver Brook	NL	50.90	-56.15	NFL	TRUE
+WBR	White Bear River	NL	47.87	-57.28	NFL	TRUE
+WAB	WesternArm	NL	51.19	-56.76	NFL	TRUE
+DLR	DollardsBrook	NL	48.02	-56.57	NFL	TRUE
+GRR	Grey River	NL	47.77	-56.93	NFL	TRUE
+IAM	Isle aux Morts River	NL	47.59	-59.01	NFL	TRUE
+GND	Grandy Brook (Burgeo)	NL	47.89	-57.72	NFL	TRUE
+CBR	Couteau Brook	NL	47.75	-58.03	NFL	TRUE
+GBR	Grand Bay	NL	47.63	-59.13	NFL	TRUE
+GNB	Grandy Brook (Burnt Islands)	NL	47.63	-58.83	NFL	TRUE
+EBB	East Bay Brook	NL	47.77	-58.25	NFL	TRUE
+BSA	BigSalmonierBrook	NL	47.06	-55.22	NFL	FALSE
+CCR	Cinq Cerf	NL	47.70	-58.15	NFL	TRUE
+LPR	La Poile	NL	47.87	-58.24	NFL	TRUE
+GBK	Garia Brook	NL	47.75	-58.53	NFL	TRUE
+FRM	Farmer's Brook	NL	47.67	-58.48	NFL	TRUE
+TYB	Humber River	NL	49.55	-57.10	NFL	TRUE
+LRBB	Lomond River Bond Bay Pond	NL	49.36	-57.65	STL	TRUE
+CUS	CuslettBrook	NL	46.96	-54.16	NFL	FALSE
+PHR	PipersHoleRiver	NL	47.93	-54.27	NFL	FALSE
+BLA	BlackRiver	NL	47.89	-54.17	NFL	FALSE
+LREB	Lomond River East Branch	NL	49.40	-57.61	STL	TRUE
+RHW	RedHarbourRiverWest	NL	47.30	-55.02	NFL	FALSE
+WBSB	Western Brook Stag Brook	NL	49.75	-57.87	STL	TRUE
+FLB	FlatBayBrook	NL	48.41	-58.58	STL	TRUE
+SHA	SandyHarbourRiver	NL	47.71	-54.36	NFL	FALSE
+a_Mars	Ã  Mars	QC	48.34	-70.87	STL	FALSE
+COD	Grand Codroy	NL	47.84	-59.20	STL	TRUE
+LWN	LawnRiver	NL	46.95	-55.54	NFL	FALSE
+CBC	ComeByChanceRiver	NL	47.97	-53.96	NFL	FALSE
+NMB	NorthwestBrook(MortierBay)	NL	47.17	-55.32	NFL	FALSE
+PBR	Piercey'sBrook	NL	46.88	-55.86	NFL	FALSE
+GBW	GreatBaraswayBrook	NL	47.12	-54.06	NFL	FALSE
+TNR	Terra Nova River	NL	48.67	-54.00	NFL	FALSE
+KED	Kedgwick	NB	47.91	-67.91	STL	FALSE
+JU	Jupiter	QC	49.47	-63.58	STL	FALSE
+NRP	NortheastPlacentiaRiver	NL	47.29	-53.80	NFL	FALSE
+TRF	TroutRiverFeeder	NL	49.65	-57.76	STL	FALSE
+BDN	BayduNord	NL	47.73	-55.44	NFL	FALSE
+UPS	Upsalquitch	NB	47.57	-66.54	STL	FALSE
+BDL	BaydeL'EauRiver	NL	47.51	-54.73	NFL	FALSE
+PAT	Patapedia	QC	47.86	-67.39	STL	FALSE
+MAT	Matapedia	QC	48.18	-67.14	STL	FALSE
+BRA	BranchRiver	NL	46.89	-53.97	NFL	FALSE
+TRB	Tailrace Brook 2020 YoY	NL	48.01	-55.79	NFL	TRUE
+MAD	Madeleine	QC	49.23	-65.32	STL	FALSE
+TREB	Trout River Eastern Brook	NL	49.37	-57.96	STL	FALSE
+NPR	NortheastPlacentiaRiver	NL	47.29	-53.80	NFL	FALSE
+MOB	Mobile River	NL	47.25	-52.84	NFL	FALSE
+NEB19_YOY	Northeast Brook 2019 YoY	NL	47.73	-55.36	NFL	FALSE
+CNR	Conne	NL	47.91	-55.70	NFL	FALSE
+TRWB	TroutRiverWesternBrook	NL	49.65	-57.76	STL	FALSE
+SHI	ShipHarbourBrook	NL	47.35	-53.87	NFL	FALSE
+NON	NonsuchRiver	NL	47.45	-54.64	NFL	FALSE
+WCB	Western Cove Brook (Chapel Arm)	NL	47.51	-53.68	NFL	FALSE
+GRB	GreatRattlingBrook-Exploits	NL	49.62	-56.17	NFL	FALSE
+SHP	SheepscotRiver	Maine	43.91	-69.67	STL	FALSE
+NGR	Narraguagus	Maine	44.52	-67.86	STL	FALSE
+LHR	LongHarbour	NL	47.82	-54.94	NFL	FALSE
+CMP	Campbellton	NL	49.28	-54.93	NFL	FALSE
+LBB	LittleBaraswayBrook	NL	47.18	-54.03	NFL	FALSE
+GBB1	Grand Bank Brook 2019 YoY	NL	47.09	-55.76	NFL	FALSE
+RNR	Renews River	NL	46.94	-52.96	NFL	FALSE
+GAR	Garnish	NL	47.23	-55.35	NFL	FALSE
+RUS	RushoonRiver	NL	47.37	-54.92	NFL	FALSE
+AVR	Avondale River	NL	47.39	-53.23	NFL	FALSE
+TOB	Tobique River	NB	46.77	-67.70	STL	FALSE
+NSH	Nashwaak	NB	45.96	-66.62	STL	FALSE
+FHB	FairHavenBrook	NL	47.54	-53.89	NFL	FALSE
+TDS	TidesBrook	NL	47.13	-55.26	NFL	FALSE
+TBR	TaylorBayBrook(BurinPenn)	NL	46.88	-55.71	NFL	FALSE
+SJO	Saint John River	NB	45.25	-66.04	STL	FALSE
+NBT	NorthBrookTrepassy	NL	46.74	-53.36	NFL	FALSE
+SER	Serpentine River	NL	48.94	-58.51	STL	FALSE
+LMS2020	Lamaline River 2020 YoY	NL	46.88	-55.78	NFL	FALSE
+BSR	BigSalmon	NB	45.42	-65.41	STL	FALSE
+RHA	RedHarbourRiverEast	NL	47.33	-54.99	NFL	FALSE
+CLR	Collinet River	NL	47.22	-53.55	NFL	FALSE
+MAG	Magaudavic River	NB	45.12	-66.85	STL	FALSE
+BCB	Bear Cove Brook	NL	47.67	-59.30	STL	FALSE
+SLR	Salmonier River	NL	47.20	-53.37	NFL	FALSE
+SPR	SoutheastPlacentiaRiver	NL	47.23	-53.88	NFL	FALSE
+LCO	Little Codroy	NL	47.83	-59.15	STL	FALSE
+USR	Upper Salmon River	NB	45.61	-64.96	STL	FALSE
+MED	Medway River	NS	44.14	-64.64	STL	FALSE
+LAH	LaHave	NS	44.37	-64.50	STL	FALSE
+GLD	Gold River	NS	44.55	-64.33	STL	FALSE
+LSR	LittleSalmonier	NL	47.07	-55.18	NFL	FALSE
+MUN	Miramichi-UpperNorthwest	NB	47.17	-65.94	STL	FALSE
+GAK	GaspereauRiver	NS	45.06	-64.38	STL	FALSE
+MSW	Miramichi-UpperSouthwest_	NB	46.55	-66.04	STL	FALSE
+WES	West River Sheet Harbour	NS	44.95	-62.59	STL	FALSE
+SMA	St. Marys River	NS	45.10	-61.96	STL	FALSE
+NRH	NorthRiverNS	NS	45.38	-63.31	STL	FALSE
+KOU	Kouchibouguac	NB	46.74	-65.20	STL	FALSE
+MOR	Morells	PEI	46.30	-62.71	STL	FALSE
+CHT	CheticampRiver	NS	46.64	-60.95	STL	FALSE
+NET	NortheastComplex-2(PEI)	PEI	46.38	-62.57	STL	FALSE
+RIC	Richibucto	NB	46.36	-65.15	STL	FALSE
+SCP	SouthCentralPEI	PEI	46.28	-63.49	STL	FALSE
+NASP	North Aspy	NS	46.83	-60.61	STL	FALSE
+RPH	RiverPhilip	NS	45.59	-63.82	STL	FALSE
+CLY	Clyburne	NS	46.66	-60.41	STL	FALSE
+MNE	NortheastMargaree	NS	46.47	-60.92	STL	FALSE
+BAD	Baddeck	NS	46.10	-60.84	STL	FALSE
+NWP	NorthwestComplex(PEI)	PEI	46.63	-64.04	STL	FALSE
+NEP	NortheastComplex-1(PEI)	PEI	46.45	-62.21	STL	FALSE
+PIE	EastRiverPictou	NS	45.54	-62.88	STL	FALSE
+ING	Ingonish	NS	46.62	-60.45	STL	FALSE
+STW	Stewiacke	NS	45.14	-63.38	STL	FALSE
+MRS	SouthwestMargaree	NS	46.24	-61.12	STL	FALSE
+JGC	GrahamRiver	NS	45.86	-61.49	STL	FALSE
+MAB	MabouRiver	NS	46.04	-61.31	STL	FALSE
+INH	Inhabitants River	NS	45.60	-61.23	STL	FALSE
