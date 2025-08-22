@@ -19,8 +19,8 @@ library(cowplot)
 library(marmap)
 
 #For system() commands to use plink
-directoryPath <- "cd /home/hallie/Desktop/SalmonAqcClimateForGithub"
-plinkPath <- "/home/hallie/miniforge3/bin/plink"
+directoryPath <- "cd /home/harno/Desktop/SalmonClimateAqaculture"
+plinkPath <- "plink"
 
 #setwd("/home/harno/Desktop/SalmonAQproject2024/Updated")
 
@@ -80,6 +80,7 @@ fish_to_include1 <- inner_join(Meta, Env, by = c("LatitudePoints","LongitudePoin
 
 
 ```{r}
+#system("conda activate plink")
 #For all North American fish
 write.table(fish_to_include1, "PLINK/fishwithenvNA_all.tsv", col.names = F, row.name = F, sep = "\t", quote = F)
 write.csv(Meta_noaqc, "Metadata/220kMetadata.csv")
@@ -89,7 +90,7 @@ write.csv(Meta_noaqc, "Metadata/220kMetadata.csv")
 #This is a function because I did it for each phylo group as well, but left out that code here
 plinkRecode <- function(cluster) {
   system(paste0(directoryPath), intern = TRUE)
- 
+  
   system(paste0(plinkPath, " --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/fishwithenv", cluster,
                 "_all.tsv --recodeA --make-bed --out PLINK/wild.env.all.", cluster))
 }
