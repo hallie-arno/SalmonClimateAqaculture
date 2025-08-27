@@ -20,7 +20,7 @@ library(marmap)
 
 #For system() commands to use plink
 directoryPath <- "cd /home/harno/Desktop/SalmonClimateAqaculture"
-plinkPath <- "plink"
+plinkPath <- "/home/harno/miniforge-pypy3/envs/plink/bin/plink"
 
 #setwd("/home/harno/Desktop/SalmonAQproject2024/Updated")
 
@@ -80,11 +80,13 @@ fish_to_include1 <- inner_join(Meta, Env, by = c("LatitudePoints","LongitudePoin
 
 
 ```{r}
-#system("conda activate plink")
 #For all North American fish
 write.table(fish_to_include1, "PLINK/fishwithenvNA_all.tsv", col.names = F, row.name = F, sep = "\t", quote = F)
 write.csv(Meta_noaqc, "Metadata/220kMetadata.csv")
 
+write.table(fish_to_include1 %>% filter(river_majority_cluster == "STL"), "PLINK/fishwithenvSTL_all.tsv", col.names = F, row.name = F, sep = "\t", quote = F)
+write.table(fish_to_include1 %>% filter(river_majority_cluster == "NFL"), "PLINK/fishwithenvNFL_all.tsv", col.names = F, row.name = F, sep = "\t", quote = F)
+write.table(fish_to_include1 %>% filter(river_majority_cluster == "LAB"), "PLINK/fishwithenvLAB_all.tsv", col.names = F, row.name = F, sep = "\t", quote = F)
 
 # Recode with PLINK
 #This is a function because I did it for each phylo group as well, but left out that code here
@@ -96,10 +98,10 @@ plinkRecode <- function(cluster) {
 }
 
 plinkRecode("NA")
-
+plinkRecode("STL")
+plinkRecode("NFL")
+plinkRecode("LAB")
 ```
-
-
 
 
 
@@ -162,8 +164,8 @@ regionWithAqc("LAB", "LAB")
 
 
 plinkFst <- function(cluster) {
-  system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
-  system(paste0("/home/hallie/miniforge3/bin/plink --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/",
+  system(paste0(directoryPath), intern = TRUE)
+  system(paste0(plinkPath," --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/",
                 cluster, 
                 ".AQ.tsv --make-bed --fst --within PLINK/", 
                 cluster, ".AQ.tsv --out PLINK/", cluster,".AQ"))
@@ -235,7 +237,7 @@ p
 ```{r}
 # RDA Function - again cluster is just "NA" here for North America
 cluster <- "NA"
-envPCA.RDA <- function(cluster) {
+
   fam.env <- fread(paste0("PLINK/wild.env.all.", cluster,".fam"), header = F) %>%  mutate(IID = V2, FID = V1) %>%  select(FID, IID)
  
   if (cluster != "NA") {
@@ -250,7 +252,7 @@ envPCA.RDA <- function(cluster) {
 #  BIOvar_sd <- paste0(BIOvar, ".scale")
  
   Env2 <- updatedEnv %>%
-    select(tidyselect::starts_with(c("Bio", "MS_")))
+    select(tidyselect::starts_with(c("Bio", "MS_", "BO")))
  
   Env <- Env2  %>%
     mutate(across(everything(), ~ as.numeric(scale(.)), .names = "{.col}.scale"))
@@ -279,7 +281,7 @@ envPCA.RDA <- function(cluster) {
 
  
   #PCAdapt
-  pcadapt.object <-  read.pcadapt(paste0("wild.env.all.", cluster, ".bed"), type = "bed")
+  pcadapt.object <-  read.pcadapt(paste0("PLINK/wild.env.all.", cluster, ".bed"), type = "bed")
  
   PCA <- pcadapt(input = pcadapt.object , K = 5)
  
@@ -292,21 +294,19 @@ envPCA.RDA <- function(cluster) {
   GenoPCA_EnvPCA <- data.frame(bind_cols(EnvPC_Biovars, PCAScores))
  
   assign(paste0("GenoPCA_EnvPCA.", cluster), GenoPCA_EnvPCA, envir = .GlobalEnv)
- 
-  #genos.dose <- fread(paste0("wild.env.all.", cluster, ".raw"), sep = " ") %>%  select (-FID, -IID, -PAT, -MAT, -SEX, -PHENOTYPE)
-  #genos.dose.imp <- data.frame(apply(genos.dose, 2, function(x) replace(x, is.na(x), as.numeric(names(which.max(table(x)))))))
- 
+  print("starting imputation")
+  genos.dose <- fread(paste0("PLINK/wild.env.all.", cluster, ".raw"), sep = " ") %>%  select (-FID, -IID, -PAT, -MAT, -SEX, -PHENOTYPE)
+  genos.dose.imp <- data.frame(apply(genos.dose, 2, function(x) replace(x, is.na(x), as.numeric(names(which.max(table(x)))))))
+ print("starting rda")
   #Note RDA will take ~60GB RAM
-  #rda <- rda(genos.dose.imp ~ GenoPCA_EnvPCA$Comp.1+GenoPCA_EnvPCA$Comp.2+GenoPCA_EnvPCA$Comp.3, scale=T)
+  rda <- rda(genos.dose.imp ~ GenoPCA_EnvPCA$Comp.1+GenoPCA_EnvPCA$Comp.2+GenoPCA_EnvPCA$Comp.3, scale=T)
   #I usually save as an object on my computer so I can transfer to my PC
- # saveRDS(rda, file = paste0(cluster, "RDA_with_estuary.rds"))
+  saveRDS(rda, file = paste0(cluster, "RDA_with_estuary.rds"))
  
  
-}
-envPCA.RDA("NA")
 
-## Call functiuon or read
-#rda <- readRDS("/home/hallie/Desktop/test_estuary.rds")
+
+rda <- readRDS("NARDA_with_estuary.rds")
 
 
 
@@ -322,29 +322,75 @@ RDA_scores_map  <- function(RDAobj, mapobj, Knum) {
   RDAobj_map <- merge(RDAobj_map1, chr, by.x = "CHROM", by.y = "CHR")
   return(RDAobj_map)}
 
-chrom_map <- fread(paste0("wild.env.", "all.NA", ".bim")) %>%
+chrom_map <- fread(paste0("PLINK/wild.env.", "all.NA", ".bim")) %>%
   mutate(CHROM = V1, SNP = V2, BP = V4) %>%
   select(CHROM, SNP, BP)
 
-rda.loadings.map <- RDA_scores_map(rda1, chrom_map, 3)
+rda.loadings.map <- RDA_scores_map(rda, chrom_map, 3)
 
+write.csv(rda.loadings.map, "rdaLoadingsMap.csv")
 
 ##OR read
 #TEMP CHANGED
-rda.loadings.map <- read.csv("/home/hallie/Desktop/SalmonAQproject2024/UpdatedNov24/estuaryloadings.csv")
+#rda.loadings.map <- read.csv("/home/hallie/Desktop/SalmonAQproject2024/UpdatedNov24/estuaryloadings.csv")
 
-rda.loadings.map
+#rda.loadings.map
 ```
 23 June - RDA Plot for supplements
 ```{r}
 library(vegan)
 ```
 
+```{r}
+fish <- fread("PLINK/wild.env.all.NA.fam") %>% 
+  select(V1, V2) %>% 
+  rename("FID" = "V1",
+         "IID" = "V2")
+```
+("NFL", "plum3")
+("STL", "darkblue")
+("LAB", "firebrick")
+```{r}
+sites <- scores(rda, display = "sites", scaling = 3)
+
+sites_df <- as.data.frame(sites) %>% 
+  cbind(fish) %>% 
+  merge(Clusters)
+
+biplot_scores <- scores(rda, display = "bp", scaling = 3)
+
+arrowNames <- c("PC1", "PC2", "PC3")
+biplot_df <- cbind(as.data.frame(biplot_scores), arrowNames)
+
+rdaPlot <- ggplot() +
+  geom_point(data = sites_df, aes(x = RDA1, y = RDA2, colour = river_majority_cluster)) +
+  geom_segment(data = biplot_df,
+  aes(x = 0, y = 0, xend = RDA1*3, yend = RDA2*3),
+  arrow = arrow(length = unit(0.3, "cm")), color = "navy", linewidth = 1) +
+  geom_text(data = biplot_df,
+            aes(x = (RDA1)*3.5, y = RDA2*3 -.02, label = arrowNames),
+            color = "black", size = 4, hjust = .08, vjust = -.5) +
+  scale_colour_manual(values = c("firebrick", "plum3", "darkblue")) +
+  theme_bw()
+
+ggsave("Figs/Supplements/rdaPlot.png", height = 8, width = 12)
+```
+
+## RDA Summary Stats
+```{r}
+R.sum <- summary(rda)
+R.sum$cont$importance[2, "RDA1"]
+R.sum$cont$importance[2, "RDA2"]
+R.sum$cont$importance[2, "RDA3"]
+
+rsqObj <- RsquareAdj(rda)
+
+```
 
 ```{r}
 #Do not run on PC
 #rda <- readRDS("/home/hallie/Desktop/test_estuary.rds")
-#plot(rda, scaling = 3)
+plot(rda, scaling = 3)
 ```
 
 ## PCA loadings for supplement
@@ -354,10 +400,10 @@ l <- loadings_NA %>%
 
 l
 
-write.table(l, "Figs/Supplements/EnvLoadings.tsv", row.names = T)
+write.table(l, "Figs/Supplements/EnvPCLoadings.tsv", row.names = T)
 ```
 
-## Outlier selection - 3 SD Overlapping
+## Outlier selection - 3 SD Overlapping (SKIPPED 22 AUGUST)
 
 ```{r}
 sd <- 3*sd(rda.loadings.map$absRDA1)
@@ -438,11 +484,13 @@ system(paste0("bedtools intersect -b sdOutliersAllAxes.bed -a Ssal3_1.genes.uniq
   system(paste0("bedtools intersect -b PLINK/rda.outlier.bed -a Panel/Ssal3_1.genes.unique.bed -wb >  Figs/Supplements/rda.outlier.genes.tsv"))
 ```
 
-## PCA at climate-associated - used?
+## PCA at climate-associated - not used?
 
 ```{r}
 for (cluster in c("NFL", "LAB", "STL", "NA")) {
-system(paste0("/home/hallie/miniforge3/bin/plink --allow-extra-chr --maf 0.01 --bfile Panel/Ssal.31.220K.mapped.June2023merge --extract PLINK/rda.outlier.bed --keep PLINK/", cluster, ".AQ.tsv --make-bed --out PLINK/", cluster, ".AQ.ClimateAsSNPs"))
+  system(paste0(directoryPath), intern = TRUE)
+system(paste0(plinkPath, " --allow-extra-chr --maf 0.01 --bfile Panel/Ssal.31.220K.mapped.June2023merge --extract PLINK/rda.outlier.bed --keep PLINK/", cluster, ".AQ.tsv --make-bed --out PLINK/", cluster, ".AQ.ClimateAsSNPs"))
+  
 }
 ```
 
@@ -506,7 +554,7 @@ plinkFstClimate<- function(cluster) {
   
   #system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
   ## halli note: double check this (previous versions used an existing BIM did not extract here)
-  system(paste0("/home/hallie/miniforge3/bin/plink --allow-extra-chr --maf 0.01 --bfile Panel/Ssal.31.220K.mapped.June2023merge --extract PLINK/rda.outlier.bed --keep PLINK/", cluster, ".AQ.tsv --make-bed --fst --within PLINK/", cluster,".AQ.tsv --out PLINK/", cluster, ".AQ.Climate"))
+  system(paste0(plinkPath, " --allow-extra-chr --maf 0.01 --bfile Panel/Ssal.31.220K.mapped.June2023merge --extract PLINK/rda.outlier.bed --keep PLINK/", cluster, ".AQ.tsv --make-bed --fst --within PLINK/", cluster,".AQ.tsv --out PLINK/", cluster, ".AQ.Climate"))
   
 }
 
@@ -521,8 +569,8 @@ plinkFstClimate("LAB")
 ##26 December edited to rm climate associated 
 plinkFst <- function(cluster) {
   print(cluster)
-  system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
-  system(paste0("/home/hallie/miniforge3/bin/plink --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/",
+ # system("cd /home/hallie/Desktop/SalmonAQproject2024", intern = TRUE)
+  system(paste0(plinkPath, " --bfile Panel/Ssal.31.220K.mapped.June2023merge --allow-extra-chr --maf 0.01 --keep PLINK/",
                 cluster, 
                 ".AQ.tsv --exclude PLINK/", cluster, ".AQ.Climate.bed", " --make-bed --fst --within PLINK/", 
                 cluster, ".AQ.tsv --out PLINK/", cluster,".AQ.Nuetral"))
@@ -622,7 +670,7 @@ naLab <-read.csv("PLINK/NAmanhattanPlotGeneLabels.csv") %>%
 
 labels <- rbind(nflLab, labLab, stlLab, naLab) %>% 
   select(c(ChrNum, SNP, POS, Gene, Group))
-labels
+
 
 write.csv(labels, "PLINK/ManhattanPlotLabels.csv")
 ```
@@ -768,6 +816,10 @@ Ol.all <- rbind(OL.both, RDA.OL, fstOL) #%>%
 STATS fst @clim0-assoc
 
 ```{r}
+OL.both
+```
+
+```{r}
 ggplot() +
   geom_density(aes(x = fstAll$FST)) +
   geom_density(aes(x = RDA.OL$FST), colour = "green")
@@ -829,7 +881,7 @@ ggsave("Figs/barplot.png")
 ## Bedtools for both for shiny go - 1%, NOT 3sd
 
 ```{r}
-system(paste0("bedtools intersect -b PLINK/overlappingOLwithEstuary.bed -a Panel/Ssal3_1.genes.unique.bed -wb >  Figs/Supplements/fsatAndRda.outlier.genes.tsv"))
+system(paste0("bedtools intersect -b PLINK/overlappingOLwithEstuaryBOTH.bed -a Panel/Ssal3_1.genes.unique.bed -wb >  Figs/Supplements/fsatAndRda.outlier.genes.BOTH.tsv"))
 ```
 
 ```{r}
